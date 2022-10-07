@@ -1,6 +1,6 @@
-# Core
+# Common
 
-![CircleCI](https://circleci.com/gh/kickback-app/common.svg?style=shield)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/kickback-app/common/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/kickback-app/common/tree/main)
 
 reusable clients across different microservices in Kickback. I attempted to make them as
 generic as possible so that they may be of use to others. 
