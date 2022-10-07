@@ -1,6 +1,6 @@
 FROM golang:1.18
 
-WORKDIR /go/src/serendipity-xyz/common
+WORKDIR /go/src/kickback-app/common
 
 COPY . .
 

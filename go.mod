@@ -1,4 +1,4 @@
-module github.com/serendipity-xyz/common
+module github.com/kickback-app/common
 
 go 1.18
 
