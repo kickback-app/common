@@ -33,6 +33,10 @@ type response struct {
 	hasError bool
 }
 
+func (r *request) SetHeader(key, value string) {
+	r.headers[key] = value
+}
+
 func (r *response) IsError() bool {
 	return r.hasError
 }
