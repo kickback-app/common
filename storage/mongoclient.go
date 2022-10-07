@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/serendipity-xyz/common/log"
+	"github.com/kickback-app/common/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

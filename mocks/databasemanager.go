@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/serendipity-xyz/common/log"
-	"github.com/serendipity-xyz/common/storage"
+	"github.com/kickback-app/common/log"
+	"github.com/kickback-app/common/storage"
 )
 
 type MockDecoder struct {
