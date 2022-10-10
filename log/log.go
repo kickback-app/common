@@ -16,7 +16,7 @@ type StdOutLogger struct {
 
 func (l StdOutLogger) Debug(s string, a ...interface{}) {
 	if l.TransactionID != "" {
-		fmt.Printf("[trxid: %v][lvl: debug] %v", l.TransactionID, fmt.Sprintf(s, a...))
+		fmt.Printf("[trxid: %v][lvl: debug] %v\n", l.TransactionID, fmt.Sprintf(s, a...))
 		return
 	}
 	fmt.Printf(s, a...)
@@ -25,7 +25,7 @@ func (l StdOutLogger) Debug(s string, a ...interface{}) {
 
 func (l StdOutLogger) Info(s string, a ...interface{}) {
 	if l.TransactionID != "" {
-		fmt.Printf("[trxid: %v][lvl: info] %v", l.TransactionID, fmt.Sprintf(s, a...))
+		fmt.Printf("[trxid: %v][lvl: info] %v\n", l.TransactionID, fmt.Sprintf(s, a...))
 		return
 	}
 	fmt.Printf(s, a...)
@@ -34,7 +34,7 @@ func (l StdOutLogger) Info(s string, a ...interface{}) {
 
 func (l StdOutLogger) Warn(s string, a ...interface{}) {
 	if l.TransactionID != "" {
-		fmt.Printf("[trxid: %v][lvl: warn] %v", l.TransactionID, fmt.Sprintf(s, a...))
+		fmt.Printf("[trxid: %v][lvl: warn] %v\n", l.TransactionID, fmt.Sprintf(s, a...))
 		return
 	}
 	fmt.Printf(s, a...)
@@ -43,7 +43,7 @@ func (l StdOutLogger) Warn(s string, a ...interface{}) {
 
 func (l StdOutLogger) Error(s string, a ...interface{}) {
 	if l.TransactionID != "" {
-		fmt.Printf("[trxid: %v][lvl: error] %v", l.TransactionID, fmt.Sprintf(s, a...))
+		fmt.Printf("[trxid: %v][lvl: error] %v\n", l.TransactionID, fmt.Sprintf(s, a...))
 		return
 	}
 	fmt.Printf(s, a...)
