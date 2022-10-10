@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -149,6 +150,10 @@ func (r *request) Do(req *http.Request) (*http.Response, error) {
 		if shouldRetry {
 			r.currAttempt++
 			time.Sleep(r.retryInterval)
+			// refill request body
+			b := new(bytes.Buffer)
+			json.NewEncoder(b).Encode(r.body)
+			req.Body = io.NopCloser(b)
 			continue
 		}
 		if err != nil {
