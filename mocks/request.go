@@ -1,10 +1,11 @@
 package mocks
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strings"
+	"reflect"
 )
 
 type requestMock struct {
@@ -42,8 +43,7 @@ type RequestValidator struct {
 	ExpectedURLPath string
 	ExpectedMethod  string
 
-	ExpectedCalledWith string
-	Fuzzy              bool // instead of exact match check it contians this string
+	ExpectedCalledWith map[string]interface{}
 }
 
 func (v *RequestValidator) validate(req *http.Request) error {
@@ -51,16 +51,15 @@ func (v *RequestValidator) validate(req *http.Request) error {
 	if req.Body != nil {
 		bodyBytes, _ = ioutil.ReadAll(req.Body) // we swallow error so the bodyBytes may be an empty array
 	}
-	body := string(bodyBytes)
-	if v.ExpectedCalledWith != "" {
-		if v.Fuzzy {
-			if !strings.Contains(body, v.ExpectedCalledWith) {
-				return validationError{Reason: fmt.Sprintf("body does not fuzzy contain validator (name: %v) expected body", v.Name)}
-			}
-		} else {
-			if body != v.ExpectedCalledWith {
-				return validationError{Reason: fmt.Sprintf("body does not full contain validator (name: %v) expected body", v.Name)}
-			}
+	// body := string(bodyBytes)
+	if v.ExpectedCalledWith != nil {
+		var container map[string]interface{}
+		err := json.Unmarshal(bodyBytes, &container)
+		if err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(container, v.ExpectedCalledWith) {
+			return validationError{Reason: "objects did not match expected called with evaluation"}
 		}
 	}
 	if v.ExpectedMethod != "" {

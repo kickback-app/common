@@ -151,7 +151,9 @@ func TestMaxRetriesExhausted(t *testing.T) {
 }
 
 func TestSuccessfulPost(t *testing.T) {
-	body := "test"
+	body := map[string]interface{}{
+		"test": "body",
+	}
 	returnBody := `{"yoohoo": true}`
 	httpClient := mocks.NewRequestMock(&mocks.NewRequestMockOpts{
 		Responses: []*http.Response{
@@ -162,10 +164,11 @@ func TestSuccessfulPost(t *testing.T) {
 		},
 		Validators: []mocks.RequestValidator{
 			{
-				ExpectedMethod:     "POST",
-				ExpectedURLPath:    "mockURL/v1/path",
-				ExpectedCalledWith: body,
-				Fuzzy:              true,
+				ExpectedMethod:  "POST",
+				ExpectedURLPath: "mockURL/v1/path",
+				ExpectedCalledWith: map[string]interface{}{
+					"test": "body",
+				},
 			},
 		},
 	})
@@ -182,7 +185,9 @@ func TestSuccessfulPost(t *testing.T) {
 }
 
 func TestSuccessfulPostRetry(t *testing.T) {
-	body := "test"
+	body := map[string]interface{}{
+		"test": "body",
+	}
 	returnBody := `{"yoohoo": true}`
 	httpClient := mocks.NewRequestMock(&mocks.NewRequestMockOpts{
 		Responses: []*http.Response{
@@ -197,10 +202,15 @@ func TestSuccessfulPostRetry(t *testing.T) {
 		},
 		Validators: []mocks.RequestValidator{
 			{
-				ExpectedMethod:     "POST",
-				ExpectedURLPath:    "mockURL/v1/path",
-				ExpectedCalledWith: body,
-				Fuzzy:              true,
+				ExpectedMethod:  "POST",
+				ExpectedURLPath: "mockURL/v1/path",
+			},
+			{
+				ExpectedMethod:  "POST",
+				ExpectedURLPath: "mockURL/v1/path",
+				ExpectedCalledWith: map[string]interface{}{
+					"test": "body",
+				},
 			},
 		},
 	})
