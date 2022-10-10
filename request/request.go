@@ -41,6 +41,10 @@ func (r *response) IsError() bool {
 	return r.hasError
 }
 
+func (r *response) Error() error {
+	return r.err
+}
+
 func (r *response) StatusCode() int {
 	return r.resp.StatusCode
 }
@@ -55,10 +59,20 @@ func (r *request) Get(url string) (*response, error) {
 	}
 	resp, err := r.Do(req)
 	hasError := err != nil
+	respErr := err
+	if resp != nil {
+		if resp.StatusCode > 399 {
+			hasError = true
+			e := BadStatusError{code: resp.StatusCode}
+			reasonBytes, _ := json.Marshal(r.resultContainer)
+			_ = json.Unmarshal(reasonBytes, r.reasonContainer)
+			respErr = e
+		}
+	}
 	return &response{
 		hasError: hasError,
 		resp:     resp,
-		err:      err,
+		err:      respErr, // this is a post request error; i.e. we successfully made the request but the status code is bad etc.
 	}, err
 }
 
@@ -77,10 +91,20 @@ func (r *request) Post(url string) (*response, error) {
 	}
 	resp, err := r.Do(req)
 	hasError := err != nil
+	respErr := err
+	if resp != nil {
+		if resp.StatusCode > 399 {
+			hasError = true
+			e := BadStatusError{code: resp.StatusCode}
+			reasonBytes, _ := json.Marshal(r.resultContainer)
+			_ = json.Unmarshal(reasonBytes, r.reasonContainer)
+			respErr = e
+		}
+	}
 	return &response{
 		hasError: hasError,
 		resp:     resp,
-		err:      err,
+		err:      respErr, // this is a post request error; i.e. we successfully made the request but the status code is bad etc.
 	}, err
 }
 
@@ -133,11 +157,6 @@ func (r *request) Do(req *http.Request) (*http.Response, error) {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("unable to read response body: %v", err)
-		}
-		if resp.StatusCode > 399 {
-			e := BadStatusError{code: resp.StatusCode}
-			_ = json.Unmarshal(body, r.reasonContainer)
-			return nil, e
 		}
 		err = json.Unmarshal(body, r.resultContainer)
 		return resp, err

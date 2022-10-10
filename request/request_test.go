@@ -65,9 +65,9 @@ func TestFailedGet(t *testing.T) {
 	var reason map[string]interface{}
 	r := request.DefaultR(httpClient).SetResult(&res).SetReason(&reason)
 	resp, err := r.Get("mockURL/v1/path")
-	require.NotNil(t, err, "expected an error")
-	require.IsType(t, request.BadStatusError{}, err, "expected error type")
-	require.True(t, resp.IsError(), "expected isError to be false")
+	require.Nil(t, err, "should be no request err, only IsError")
+	require.IsType(t, request.BadStatusError{}, resp.Error(), "expected error type")
+	require.True(t, resp.IsError(), "expected isError to be true")
 	require.Equal(t, 1, httpClient.CallCount(), "call count")
 	require.Equal(t, map[string]interface{}{
 		"error": "myError",
