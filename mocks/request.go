@@ -51,7 +51,6 @@ func (v *RequestValidator) validate(req *http.Request) error {
 	if req.Body != nil {
 		bodyBytes, _ = ioutil.ReadAll(req.Body) // we swallow error so the bodyBytes may be an empty array
 	}
-	// body := string(bodyBytes)
 	if v.ExpectedCalledWith != nil {
 		var container map[string]interface{}
 		err := json.Unmarshal(bodyBytes, &container)
@@ -59,7 +58,7 @@ func (v *RequestValidator) validate(req *http.Request) error {
 			return err
 		}
 		if !reflect.DeepEqual(container, v.ExpectedCalledWith) {
-			return validationError{Reason: "objects did not match expected called with evaluation"}
+			return validationError{Reason: fmt.Sprintf("objects did not match expected called with evaluation: got = %#v, want = %#v", container, v.ExpectedCalledWith)}
 		}
 	}
 	if v.ExpectedMethod != "" {
