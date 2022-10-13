@@ -3,13 +3,10 @@ package twilio
 import (
 	"errors"
 	"io/ioutil"
-	"net/http"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/kickback-app/common/log"
-	"github.com/kickback-app/common/request"
 	"github.com/kickback-app/common/storage"
 	"github.com/kickback-app/common/utils/gsmutils"
 	"github.com/twilio/twilio-go"
@@ -19,16 +16,14 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-const (
-	baseurl = "https://api.twilio.com"
-)
-
-var defaultclient = &http.Client{Timeout: 15 * time.Second}
+type TwilioPublisher interface {
+	CreateMessage(params *twilioapi.CreateMessageParams) (*twilioapi.ApiV2010Message, error)
+}
 
 type Client struct {
 	logger          log.Logger
 	dbclient        storage.Manager
-	httpclient      request.HTTPClient
+	twilioclient    TwilioPublisher
 	accountSID      string
 	accountToken    string
 	fromPhonenumber string
@@ -37,17 +32,13 @@ type Client struct {
 type ClientParams struct {
 	Logger          log.Logger
 	Dbclient        storage.Manager
-	Httpclient      request.HTTPClient
+	Publisher       TwilioPublisher
 	AccountSID      string
 	AccountToken    string
 	FromPhonenumber string
 }
 
 func NewClient(params *ClientParams) (*Client, error) {
-	httpclient := params.Httpclient
-	if httpclient == nil {
-		httpclient = defaultclient
-	}
 	if params.AccountSID == "" {
 		return nil, errors.New("accountSID cannot be empty")
 	}
@@ -57,11 +48,19 @@ func NewClient(params *ClientParams) (*Client, error) {
 	if params.FromPhonenumber == "" {
 		return nil, errors.New("from phonenumber cannot be empty")
 	}
+	var twilioclient TwilioPublisher
+	twilioclient = twilio.NewRestClientWithParams(twilio.ClientParams{
+		Username: params.AccountSID,
+		Password: params.AccountToken,
+	}).Api
+	if params.Publisher != nil {
+		twilioclient = params.Publisher
+	}
 	return &Client{
-		logger:     params.Logger,
-		dbclient:   params.Dbclient,
-		httpclient: httpclient,
+		logger:   params.Logger,
+		dbclient: params.Dbclient,
 
+		twilioclient:    twilioclient,
 		accountSID:      params.AccountSID,
 		accountToken:    params.AccountToken,
 		fromPhonenumber: params.FromPhonenumber,
@@ -71,11 +70,6 @@ func NewClient(params *ClientParams) (*Client, error) {
 // SendSMS invokes twilio API to send sms message following their docs
 // https://www.twilio.com/docs/sms/quickstart/go
 func (client *Client) SendSMS(msg, phonenumber string) error {
-	twilioClient := twilio.NewRestClientWithParams(twilio.ClientParams{
-		Username: client.accountSID,
-		Password: client.accountToken,
-	})
-
 	msg, err := NormalizeTwilioMsg(msg)
 	if err != nil {
 		client.logger.Error("unable to normalize sms message: %v", err)
@@ -87,7 +81,7 @@ func (client *Client) SendSMS(msg, phonenumber string) error {
 	params.SetFrom(client.fromPhonenumber)
 	params.SetTo(phonenumber)
 
-	resp, err := twilioClient.Api.CreateMessage(params)
+	resp, err := client.twilioclient.CreateMessage(params)
 	if err != nil {
 		client.logger.Error("unable to send sms message: %v", err)
 		return err
