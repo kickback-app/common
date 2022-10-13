@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/aws/aws-sdk-go v1.44.114
+	github.com/navivix/exponent-server-sdk-golang v0.0.0-20211012185921-280ba35546ca
 	github.com/stretchr/testify v1.8.0
 	github.com/twilio/twilio-go v1.0.0
 	go.mongodb.org/mongo-driver v1.10.2
