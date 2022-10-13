@@ -2,16 +2,28 @@ package expo
 
 import (
 	"github.com/kickback-app/common/log"
-	expo "github.com/navivix/exponent-server-sdk-golang/sdk"
 	expoApi "github.com/navivix/exponent-server-sdk-golang/sdk"
 )
 
-type Client struct {
-	logger log.Logger
+type ExpoPublisher interface {
+	Publish(message *expoApi.PushMessage) ([]expoApi.PushResponse, error)
 }
 
-func NewClient(logger log.Logger) *Client {
-	return &Client{logger: logger}
+type Client struct {
+	logger    log.Logger
+	publisher ExpoPublisher
+}
+
+func NewClient(logger log.Logger, publisher ExpoPublisher) *Client {
+	var expopublisher ExpoPublisher
+	expopublisher = expoApi.NewPushClient(nil)
+	if publisher != nil {
+		expopublisher = publisher
+	}
+	return &Client{
+		logger:    logger,
+		publisher: expopublisher,
+	}
 }
 
 type Notification struct {
@@ -35,12 +47,10 @@ func (client *Client) SendPushNotification(msg *Notification) (*ExpoResult, erro
 		return nil, nil
 	}
 
-	expoClient := expoApi.NewPushClient(nil)
-
 	invalidtokens := 0
-	pushTokens := []expo.ExponentPushToken{}
+	pushTokens := []expoApi.ExponentPushToken{}
 	for _, etoken := range msg.ExpoPushTokens {
-		token, err := expo.NewExponentPushToken(etoken)
+		token, err := expoApi.NewExponentPushToken(etoken)
 		if err != nil {
 			invalidtokens++
 			continue
@@ -55,14 +65,14 @@ func (client *Client) SendPushNotification(msg *Notification) (*ExpoResult, erro
 	if priority == "" {
 		priority = expoApi.DefaultPriority
 	}
-	expoMsg := &expo.PushMessage{
+	expoMsg := &expoApi.PushMessage{
 		To:       pushTokens,
 		Title:    msg.Title,
 		Body:     msg.Body,
 		Data:     msg.Data,
 		Sound:    sound,
 		Priority: priority}
-	responses, err := expoClient.Publish(expoMsg)
+	responses, err := client.publisher.Publish(expoMsg)
 	if err != nil {
 		client.logger.Error("unable to publish push notification: %v", err)
 		return nil, err
@@ -71,6 +81,7 @@ func (client *Client) SendPushNotification(msg *Notification) (*ExpoResult, erro
 	for _, res := range responses {
 		client.logger.Debug("push notification details: %+v", res.Details)
 		if err := res.ValidateResponse(); err != nil {
+			failed++
 			client.logger.Error("unable to to send push notification to %v: %v", res.PushMessage.To, err)
 		}
 	}
