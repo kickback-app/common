@@ -2,12 +2,13 @@ package twilio
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"unicode"
 
 	"github.com/kickback-app/common/log"
-	"github.com/kickback-app/common/storage"
 	"github.com/kickback-app/common/utils/gsmutils"
 	"github.com/twilio/twilio-go"
 	twilioapi "github.com/twilio/twilio-go/rest/api/v2010"
@@ -16,13 +17,14 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+const phonenumberRegex = `^\+\d{11,}$`
+
 type TwilioPublisher interface {
 	CreateMessage(params *twilioapi.CreateMessageParams) (*twilioapi.ApiV2010Message, error)
 }
 
 type Client struct {
 	logger          log.Logger
-	dbclient        storage.Manager
 	twilioclient    TwilioPublisher
 	accountSID      string
 	accountToken    string
@@ -31,7 +33,6 @@ type Client struct {
 
 type ClientParams struct {
 	Logger          log.Logger
-	Dbclient        storage.Manager
 	Publisher       TwilioPublisher
 	AccountSID      string
 	AccountToken    string
@@ -45,8 +46,8 @@ func NewClient(params *ClientParams) (*Client, error) {
 	if params.AccountToken == "" {
 		return nil, errors.New("accountToken cannot be empty")
 	}
-	if params.FromPhonenumber == "" {
-		return nil, errors.New("from phonenumber cannot be empty")
+	if !IsValidPhoneNumber(params.FromPhonenumber) {
+		return nil, fmt.Errorf("from phonenumber (%v) is invalid", params.FromPhonenumber)
 	}
 	var twilioclient TwilioPublisher
 	twilioclient = twilio.NewRestClientWithParams(twilio.ClientParams{
@@ -56,9 +57,13 @@ func NewClient(params *ClientParams) (*Client, error) {
 	if params.Publisher != nil {
 		twilioclient = params.Publisher
 	}
+	var logger log.Logger
+	logger = log.StdOutLogger{}
+	if params.Logger != nil {
+		logger = params.Logger
+	}
 	return &Client{
-		logger:   params.Logger,
-		dbclient: params.Dbclient,
+		logger: logger,
 
 		twilioclient:    twilioclient,
 		accountSID:      params.AccountSID,
@@ -70,6 +75,9 @@ func NewClient(params *ClientParams) (*Client, error) {
 // SendSMS invokes twilio API to send sms message following their docs
 // https://www.twilio.com/docs/sms/quickstart/go
 func (client *Client) SendSMS(msg, phonenumber string) error {
+	if !IsValidPhoneNumber(phonenumber) {
+		return fmt.Errorf("phonenumber (%v) is invalid", phonenumber)
+	}
 	msg, err := NormalizeTwilioMsg(msg)
 	if err != nil {
 		client.logger.Error("unable to normalize sms message: %v", err)
@@ -113,4 +121,12 @@ func NormalizeTwilioMsg(in string) (string, error) {
 	}
 	s := gsmutils.ReplaceRunesToGSM7(string(b))
 	return s, nil
+}
+
+// IsValidPhoneNumber returns true if the phone number is valid according to twilio rules
+func IsValidPhoneNumber(phoneNumber string) bool {
+	if matches, _ := regexp.MatchString(phonenumberRegex, phoneNumber); matches {
+		return true
+	}
+	return false
 }
