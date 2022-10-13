@@ -2,6 +2,7 @@ package request
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +37,15 @@ type response struct {
 
 func (r *request) SetHeader(key, value string) {
 	r.headers[key] = value
+}
+
+func (r *request) SetBasicAuth(username, password string) {
+	r.headers["Authorization"] = "Basic " + basicAuth(username, password)
+}
+
+func basicAuth(username, password string) string {
+	auth := username + ":" + password
+	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
 func (r *response) IsError() bool {
