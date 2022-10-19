@@ -10,6 +10,7 @@ import (
 	"github.com/kickback-app/common/twilio"
 	"github.com/stretchr/testify/require"
 	twilioapi "github.com/twilio/twilio-go/rest/api/v2010"
+	openapi "github.com/twilio/twilio-go/rest/verify/v2"
 )
 
 func TestMain(m *testing.M) {
@@ -26,6 +27,34 @@ func (mtc mockTwilioClient) CreateMessage(params *twilioapi.CreateMessageParams)
 	return mtc.resp, mtc.err
 }
 
+type mockTwilioVerifier struct {
+	callcount int
+	status    string
+	err       error
+}
+
+func (mtv *mockTwilioVerifier) CallCount() int {
+	return mtv.callcount
+}
+
+func (mtv *mockTwilioVerifier) CreateVerification(ServiceID string, params *openapi.CreateVerificationParams) (*openapi.VerifyV2Verification, error) {
+	mtv.callcount++
+	mocksid := "sid"
+	ver := &openapi.VerifyV2Verification{
+		Sid: &mocksid,
+	}
+	return ver, mtv.err
+}
+
+func (mtv *mockTwilioVerifier) CreateVerificationCheck(ServiceID string, params *openapi.CreateVerificationCheckParams) (*openapi.VerifyV2VerificationCheck, error) {
+	mtv.callcount++
+	mocksid := "sid"
+	ver := &openapi.VerifyV2VerificationCheck{
+		Sid:    &mocksid,
+		Status: &mtv.status,
+	}
+	return ver, mtv.err
+}
 func TestClientInitMissingAccountSID(t *testing.T) {
 	_, err := twilio.NewClient(&twilio.ClientParams{
 		AccountSID:      "",
@@ -141,4 +170,95 @@ func TestIsValidPhoneNumber(t *testing.T) {
 		result := twilio.IsValidPhoneNumber(c.phoneNumber)
 		require.Equal(t, c.ExpectedResult, result, fmt.Sprintf("testing case %v", i))
 	}
+}
+
+func TestCanSendOTP(t *testing.T) {
+	sid := "mockSid"
+	client, err := twilio.NewClient(&twilio.ClientParams{
+		Logger:          log.StdOutLogger{},
+		AccountSID:      "mockaccountsid",
+		AccountToken:    "mockaccounttoken",
+		FromPhonenumber: "+15104148622",
+		Publisher: mockTwilioClient{
+			resp: &twilioapi.ApiV2010Message{
+				Sid: &sid,
+			},
+			err: nil,
+		},
+		Verifier: &mockTwilioVerifier{},
+	})
+	require.Nil(t, err, "new client err should be nil")
+	err = client.SendOtp("+15104148611")
+	require.Nil(t, err, "send otp err should be nil")
+}
+
+func TestCanCheckOTP(t *testing.T) {
+	sid := "mockSid"
+	client, err := twilio.NewClient(&twilio.ClientParams{
+		Logger:          log.StdOutLogger{},
+		AccountSID:      "mockaccountsid",
+		AccountToken:    "mockaccounttoken",
+		FromPhonenumber: "+15104148622",
+		Publisher: mockTwilioClient{
+			resp: &twilioapi.ApiV2010Message{
+				Sid: &sid,
+			},
+			err: nil,
+		},
+		Verifier: &mockTwilioVerifier{
+			status: "approved",
+		},
+	})
+	require.Nil(t, err, "new client err should be nil")
+	ok, err := client.CheckOtp("+15104148611", "11")
+	require.Nil(t, err, "send otp err should be nil")
+	require.True(t, ok, "otp should be ok")
+}
+
+func TestCanCheckOTPInvalid(t *testing.T) {
+	sid := "mockSid"
+	client, err := twilio.NewClient(&twilio.ClientParams{
+		Logger:          log.StdOutLogger{},
+		AccountSID:      "mockaccountsid",
+		AccountToken:    "mockaccounttoken",
+		FromPhonenumber: "+15104148622",
+		Publisher: mockTwilioClient{
+			resp: &twilioapi.ApiV2010Message{
+				Sid: &sid,
+			},
+			err: nil,
+		},
+		Verifier: &mockTwilioVerifier{
+			status: "NotApproved",
+		},
+	})
+	require.Nil(t, err, "new client err should be nil")
+	ok, err := client.CheckOtp("+15104148611", "11")
+	require.NotNil(t, err, "send otp err should be nil")
+	require.IsType(t, twilio.InvalidOtpCodeErr{}, err, "err should be of expected type")
+	require.False(t, ok, "otp should be not be ok")
+}
+
+func TestCanCheckOTPErr(t *testing.T) {
+	sid := "mockSid"
+	client, err := twilio.NewClient(&twilio.ClientParams{
+		Logger:          log.StdOutLogger{},
+		AccountSID:      "mockaccountsid",
+		AccountToken:    "mockaccounttoken",
+		FromPhonenumber: "+15104148622",
+		Publisher: mockTwilioClient{
+			resp: &twilioapi.ApiV2010Message{
+				Sid: &sid,
+			},
+			err: nil,
+		},
+		Verifier: &mockTwilioVerifier{
+			status: "approved",
+			err:    errors.New("random err"),
+		},
+	})
+	require.Nil(t, err, "new client err should be nil")
+	ok, err := client.CheckOtp("+15104148611", "11")
+	require.NotNil(t, err, "send otp err should be nil")
+	require.False(t, ok, "otp should be not be ok")
 }

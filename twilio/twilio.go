@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"regexp"
 	"strings"
 	"unicode"
@@ -12,6 +13,7 @@ import (
 	"github.com/kickback-app/common/utils/gsmutils"
 	"github.com/twilio/twilio-go"
 	twilioapi "github.com/twilio/twilio-go/rest/api/v2010"
+	openapi "github.com/twilio/twilio-go/rest/verify/v2"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -23,19 +25,28 @@ type TwilioPublisher interface {
 	CreateMessage(params *twilioapi.CreateMessageParams) (*twilioapi.ApiV2010Message, error)
 }
 
+type TwilioVerifier interface {
+	CreateVerification(ServiceID string, params *openapi.CreateVerificationParams) (*openapi.VerifyV2Verification, error)
+	CreateVerificationCheck(ServiceID string, params *openapi.CreateVerificationCheckParams) (*openapi.VerifyV2VerificationCheck, error)
+}
+
 type Client struct {
 	logger          log.Logger
 	twilioclient    TwilioPublisher
+	twilioVerifier  TwilioVerifier
 	accountSID      string
 	accountToken    string
+	verifyServiceID string
 	fromPhonenumber string
 }
 
 type ClientParams struct {
 	Logger          log.Logger
 	Publisher       TwilioPublisher
+	Verifier        TwilioVerifier
 	AccountSID      string
 	AccountToken    string
+	VerifyServiceID string
 	FromPhonenumber string
 }
 
@@ -50,10 +61,11 @@ func NewClient(params *ClientParams) (*Client, error) {
 		return nil, fmt.Errorf("from phonenumber (%v) is invalid", params.FromPhonenumber)
 	}
 	var twilioclient TwilioPublisher
-	twilioclient = twilio.NewRestClientWithParams(twilio.ClientParams{
+	twiliRestClient := twilio.NewRestClientWithParams(twilio.ClientParams{
 		Username: params.AccountSID,
 		Password: params.AccountToken,
-	}).Api
+	})
+	twilioclient = twiliRestClient.Api
 	if params.Publisher != nil {
 		twilioclient = params.Publisher
 	}
@@ -62,12 +74,19 @@ func NewClient(params *ClientParams) (*Client, error) {
 	if params.Logger != nil {
 		logger = params.Logger
 	}
+	var twilioverifier TwilioVerifier
+	twilioverifier = twiliRestClient.VerifyV2
+	if params.Verifier != nil {
+		twilioverifier = params.Verifier
+	}
 	return &Client{
 		logger: logger,
 
 		twilioclient:    twilioclient,
+		twilioVerifier:  twilioverifier,
 		accountSID:      params.AccountSID,
 		accountToken:    params.AccountToken,
+		verifyServiceID: params.VerifyServiceID,
 		fromPhonenumber: params.FromPhonenumber,
 	}, nil
 }
@@ -123,10 +142,89 @@ func NormalizeTwilioMsg(in string) (string, error) {
 	return s, nil
 }
 
+// SendOtp twilio OTP setup
+// https://www.twilio.com/blog/sms-one-time-passcode-verification-otp-2fa-golang
+func (client *Client) SendOtp(phonenumber string) error {
+	if ok := IsValidPhoneNumber(phonenumber); !ok {
+		return InvalidPhonenumberError{Phonenumber: phonenumber}
+	}
+	params := &openapi.CreateVerificationParams{}
+	params.SetTo(phonenumber)
+	params.SetChannel("sms")
+
+	resp, err := client.twilioVerifier.CreateVerification(client.verifyServiceID, params)
+	if err != nil {
+		client.logger.Error("unable to send otp: %v", err)
+		return err
+	}
+	client.logger.Info("successfully sent otp to %v: %v", *resp.Sid)
+	return nil
+}
+
+func (client *Client) CheckOtp(phonenumber, code string) (bool, error) {
+	params := &openapi.CreateVerificationCheckParams{}
+	params.SetTo(phonenumber)
+	params.SetCode(code)
+
+	resp, err := client.twilioVerifier.CreateVerificationCheck(client.verifyServiceID, params)
+	if err != nil {
+		client.logger.Error("unable to check otp: %v", err)
+		return false, err
+	}
+	if *resp.Status == "approved" {
+		client.logger.Info("passed otp check")
+		return true, nil
+	}
+	client.logger.Error("invalid otp code")
+	return false, InvalidOtpCodeErr{}
+}
+
 // IsValidPhoneNumber returns true if the phone number is valid according to twilio rules
-func IsValidPhoneNumber(phoneNumber string) bool {
-	if matches, _ := regexp.MatchString(phonenumberRegex, phoneNumber); matches {
+func IsValidPhoneNumber(phonenumber string) bool {
+	if matches, _ := regexp.MatchString(phonenumberRegex, phonenumber); matches {
 		return true
 	}
 	return false
+}
+
+/*
+ * Associated errors
+ *
+ */
+
+type InvalidPhonenumberError struct {
+	Phonenumber string
+}
+
+func (e InvalidPhonenumberError) Error() string {
+	return fmt.Sprintf("invalid phonenumber: %s: should match format of +15104158622", e.Phonenumber)
+}
+
+func (e InvalidPhonenumberError) Code() int {
+	return http.StatusBadRequest
+}
+
+type ThrottleError struct {
+	RetryAfter string
+}
+
+func (e ThrottleError) Error() string {
+	if e.RetryAfter != "" {
+		return fmt.Sprintf("too many requests: retry after %v", e.RetryAfter)
+	}
+	return "too many requests"
+}
+
+func (e ThrottleError) Code() int {
+	return http.StatusTooManyRequests
+}
+
+type InvalidOtpCodeErr struct{}
+
+func (e InvalidOtpCodeErr) Error() string {
+	return "imvalid otp code"
+}
+
+func (e InvalidOtpCodeErr) Code() int {
+	return http.StatusBadRequest
 }
