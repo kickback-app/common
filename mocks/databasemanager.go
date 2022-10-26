@@ -15,6 +15,9 @@ type MockDecoder struct {
 }
 
 func (md MockDecoder) Decode(v interface{}) error {
+	if s, ok := md.data.(string); ok {
+		return json.Unmarshal([]byte(s), v)
+	}
 	b, err := json.Marshal(md.data)
 	if err != nil {
 		return err
@@ -93,11 +96,25 @@ func (mm *MockDBManager) FindMany(l log.Logger, cc *storage.CallContext, params 
 }
 
 func (mm *MockDBManager) InsertOne(l log.Logger, cc *storage.CallContext, document interface{}, params *storage.InsertOneParams) (interface{}, error) {
-	return "someId", nil
+	resp, err := mm.getResp()
+	if err != nil {
+		mm.CallCount++
+		return MockDecoder{}, err
+	}
+	e := mm.getErr()
+	mm.CallCount++
+	return resp, e
 }
 
 func (mm *MockDBManager) InsertMany(l log.Logger, cc *storage.CallContext, data []interface{}, params *storage.InsertManyParams) (interface{}, error) {
-	return []string{"Id1", "Id2"}, nil
+	resp, err := mm.getResp()
+	if err != nil {
+		mm.CallCount++
+		return MockDecoder{}, err
+	}
+	e := mm.getErr()
+	mm.CallCount++
+	return resp, e
 }
 
 func (mm *MockDBManager) Upsert(l log.Logger, cc *storage.CallContext, updates interface{}, params *storage.UpsertParams) (int64, error) {
