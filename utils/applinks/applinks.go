@@ -38,12 +38,10 @@ func DynamicAppURL(eventID string) string {
 	resp, err := request.Post(url)
 
 	if err != nil {
-		fmt.Println("IN Err clause")
 		log.Logger.Error(nil, "unable to create dynamicLinkInfo: %v", err)
 		return defaultAppURL
 	}
 	if resp.IsError() {
-		fmt.Println("In resp.IsErr clause")
 		log.Logger.Error(nil, "unable to create dynamicLinkInfo due to bad status code (%v): %v", resp.StatusCode, resp.Error())
 		return defaultAppURL
 	}
@@ -52,7 +50,6 @@ func DynamicAppURL(eventID string) string {
 
 func BuildDynamicLink(eventId string, userId string) string {
 	link := url.QueryEscape(fmt.Sprintf("https://kickbackapp.io/invited?eventId=%v&userId=%v", eventId, userId))
-
 	return fmt.Sprintf("https://kickbackapp.page.link/?link=%v&ibi=com.kickbackapp&isi=1607393773", link)
 }
 
