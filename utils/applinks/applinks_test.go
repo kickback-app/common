@@ -1,10 +1,14 @@
 package applinks
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 	"testing"
 
+	"github.com/kickback-app/common/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -80,6 +84,50 @@ func TestBuildInviteWebAppLink(t *testing.T) {
 	}
 	for _, c := range cases {
 		resultEncoded := BuildInviteWebAppLink(c.in.eventId, c.in.userId)
+		result, err := url.QueryUnescape(resultEncoded)
+		if err != nil {
+			t.Fail()
+		}
+		assert.Equal(t, c.out, result, fmt.Sprintf("testing => %+v", c.in))
+	}
+}
+
+func TestDynamicAppURL(t *testing.T) {
+	fireBaseUrl = "mockURL/v1/path"
+	DefaultClient = mocks.NewRequestMock(&mocks.NewRequestMockOpts{
+		Responses: []*http.Response{
+			{
+				StatusCode: 200,
+				Body: ioutil.NopCloser(bytes.NewReader([]byte(`{
+					"shortLink": "mockShortLink",
+					"previewLink": "mockPreviewLink"
+				  }`))),
+			},
+		},
+		Validators: []mocks.RequestValidator{
+			{
+				ExpectedMethod:  "POST",
+				ExpectedURLPath: fireBaseUrl,
+			},
+		},
+	})
+
+	cases := []struct {
+		in struct {
+			eventId string
+		}
+		out string
+	}{
+		{
+			struct {
+				eventId string
+			}{"123"},
+			"mockShortLink",
+		},
+	}
+
+	for _, c := range cases {
+		resultEncoded := DynamicAppURL(c.in.eventId)
 		result, err := url.QueryUnescape(resultEncoded)
 		if err != nil {
 			t.Fail()

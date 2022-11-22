@@ -15,8 +15,12 @@ const defaultAppURL = "https://kickbackapp.page.link/89eQ"
 
 var googleCloudAPIKey = os.Getenv("GOOGLE_CLOUD_API_KEY")
 
+var DefaultClient request.HTTPClient = &http.Client{Timeout: 15 * time.Second}
+
+var fireBaseUrl = fmt.Sprintf("https://firebasedynamiclinks.googleapis.com/v1/shortLinks?key=%v", googleCloudAPIKey)
+
 func DynamicAppURL(eventID string) string {
-	url := fmt.Sprintf("https://firebasedynamiclinks.googleapis.com/v1/shortLinks?key=%v", googleCloudAPIKey)
+
 	body := map[string]interface{}{
 		"dynamicLinkInfo": map[string]interface{}{
 			"domainUriPrefix": "https://kickbackapp.page.link",
@@ -31,19 +35,37 @@ func DynamicAppURL(eventID string) string {
 		PreviewLink string `json:"previewLink"`
 	}
 
-	request := request.DefaultR(&http.Client{Timeout: 15 * time.Second})
+	var reason struct {
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+			Status  string `json:"status"`
+			Details []struct {
+				Type     string `json:"@type"`
+				Reason   string `json:"reason"`
+				Domain   string `json:"domain"`
+				Metadata struct {
+					Service string `json:"service"`
+				} `json:"metadata"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+
+	request := request.DefaultR(DefaultClient)
 	request.SetHeader("Content-Type", "application/json")
 	request.SetResult(&result) // Unmarshal response into struct automatically if status code >= 200 and <= 299.
 	request.SetBody(body)
+	request.SetReason(&reason)
 
-	resp, err := request.Post(url)
+	resp, err := request.Post(fireBaseUrl)
 
 	if err != nil {
 		log.Logger.Error(nil, "unable to create dynamicLinkInfo: %v", err)
 		return defaultAppURL
 	}
 	if resp.IsError() {
-		log.Logger.Error(nil, "unable to create dynamicLinkInfo due to bad status code (%v): %v", resp.StatusCode, resp.Error())
+		fmt.Println(resp)
+		log.Logger.Error(nil, "unable to create dynamicLinkInfo due to bad status code (%v): %v", resp.StatusCode, reason)
 		return defaultAppURL
 	}
 	return result.ShortLink
