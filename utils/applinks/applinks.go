@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/kickback-app/common/log"
 	"github.com/kickback-app/common/request"
@@ -30,7 +31,7 @@ func DynamicAppURL(eventID string) string {
 		PreviewLink string `json:"previewLink"`
 	}
 
-	request := request.DefaultR(http.DefaultClient)
+	request := request.DefaultR(&http.Client{Timeout: 15 * time.Second})
 	request.SetHeader("Content-Type", "application/json")
 	request.SetResult(&result) // Unmarshal response into struct automatically if status code >= 200 and <= 299.
 	request.SetBody(body)
