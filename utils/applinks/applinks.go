@@ -3,7 +3,6 @@ package applinks
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
@@ -64,7 +63,6 @@ func DynamicAppURL(eventID string) string {
 		return defaultAppURL
 	}
 	if resp.IsError() {
-		fmt.Println(resp)
 		log.Logger.Error(nil, "unable to create dynamicLinkInfo due to bad status code (%v): %v", resp.StatusCode, reason)
 		return defaultAppURL
 	}
@@ -72,7 +70,7 @@ func DynamicAppURL(eventID string) string {
 }
 
 func BuildDynamicLink(eventId string, userId string) string {
-	link := url.QueryEscape(fmt.Sprintf("https://kickbackapp.io/invited?eventId=%v&userId=%v", eventId, userId))
+	link := fmt.Sprintf("https://kickbackapp.io/invited?eventId=%v&userId=%v", eventId, userId)
 	return fmt.Sprintf("https://kickbackapp.page.link/?link=%v&ibi=com.kickbackapp&isi=1607393773", link)
 }
 

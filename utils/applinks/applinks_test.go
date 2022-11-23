@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/kickback-app/common/mocks"
@@ -43,11 +42,7 @@ func TestBuildDynamicLink(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		resultEncoded := BuildDynamicLink(c.in.eventId, c.in.userId)
-		result, err := url.QueryUnescape(resultEncoded)
-		if err != nil {
-			t.Fail()
-		}
+		result := BuildDynamicLink(c.in.eventId, c.in.userId)
 		assert.Equal(t, c.out, result, fmt.Sprintf("testing => %+v", c.in))
 	}
 }
@@ -83,11 +78,7 @@ func TestBuildInviteWebAppLink(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		resultEncoded := BuildInviteWebAppLink(c.in.eventId, c.in.userId)
-		result, err := url.QueryUnescape(resultEncoded)
-		if err != nil {
-			t.Fail()
-		}
+		result := BuildInviteWebAppLink(c.in.eventId, c.in.userId)
 		assert.Equal(t, c.out, result, fmt.Sprintf("testing => %+v", c.in))
 	}
 }
@@ -127,11 +118,7 @@ func TestDynamicAppURL(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		resultEncoded := DynamicAppURL(c.in.eventId)
-		result, err := url.QueryUnescape(resultEncoded)
-		if err != nil {
-			t.Fail()
-		}
+		result := DynamicAppURL(c.in.eventId)
 		assert.Equal(t, c.out, result, fmt.Sprintf("testing => %+v", c.in))
 	}
 }
