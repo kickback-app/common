@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/kickback-app/common/log"
@@ -236,5 +235,19 @@ func (mc *mongoClient) Delete(l log.Logger, cc *CallContext, params *DeleteParam
 		l.Error("invalid parameters")
 		return 0, MissingRequiredParameterError{}
 	}
-	return 0, fmt.Errorf("unimplemented")
+
+	collection := mc.Collection(params.Collection)
+
+	var err error
+	var res *mongo.DeleteResult
+	if !params.Multiple {
+		res, err = collection.DeleteOne(cc.ctx, params.Filter, params.AdditionalOpts...)
+	} else {
+		res, err = collection.DeleteMany(cc.ctx, params.Filter, params.AdditionalOpts...)
+	}
+	if err != nil {
+		l.Error("unable to update doc(s): %v", err)
+		return 0, err
+	}
+	return res.DeletedCount, nil
 }
