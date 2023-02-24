@@ -185,6 +185,7 @@ type UpsertParams struct {
 	Filter         interface{}
 	Multiple       bool
 	Generic        bool
+	Upsert         *bool
 	AdditionalOpts []*options.UpdateOptions
 }
 
@@ -202,8 +203,11 @@ func (mc *mongoClient) Upsert(l log.Logger, cc *CallContext, updates interface{}
 	if params.Generic {
 		updateCmd = bson.D{{Key: "$set", Value: updates}}
 	}
-
-	params.AdditionalOpts = append(params.AdditionalOpts, options.Update().SetUpsert(true))
+	upsert := true
+	if params.Upsert != nil {
+		upsert = *params.Upsert
+	}
+	params.AdditionalOpts = append(params.AdditionalOpts, options.Update().SetUpsert(upsert))
 	var err error
 	var res *mongo.UpdateResult
 	if !params.Multiple {
