@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/kickback-app/common/log"
@@ -21,9 +22,13 @@ func (cd cursorDecoder) Decode(v interface{}) error {
 	return cd.cursor.All(cd.ctx, v)
 }
 
+var retryableErrs = []string{}
+
 type mongoClient struct {
-	client   *mongo.Client
-	database *mongo.Database
+	client      *mongo.Client
+	database    *mongo.Database
+	maxRetries  int
+	retryPolicy func(int) time.Duration
 }
 
 type CallContext struct {
@@ -40,13 +45,18 @@ func NewCallContext() *CallContext {
 
 // NewMongoClient returns a new mongoDB client
 func NewMongoClient(client *mongo.Client, database *mongo.Database) *mongoClient {
+	retries := 3
+	retryPolicy := func(i int) time.Duration {
+		return time.Duration(10*i) * time.Second
+	}
 	return &mongoClient{
-		client:   client,
-		database: database,
+		client:      client,
+		database:    database,
+		maxRetries:  retries,
+		retryPolicy: retryPolicy,
 	}
 }
 
-// Collection returns a mongoDB collection from the connected database
 func (mc *mongoClient) Collection(collection string) *mongo.Collection {
 	return mc.database.Collection(collection)
 }
@@ -63,7 +73,6 @@ func (mc *mongoClient) Close(l log.Logger) {
 	}()
 }
 
-// FindOneParams
 type FindOneParams struct {
 	Collection     string
 	Filter         interface{}
@@ -75,6 +84,23 @@ func (fop *FindOneParams) valid() bool {
 }
 
 func (mc *mongoClient) FindOne(l log.Logger, cc *CallContext, params *FindOneParams) (Decoder, error) {
+	attempt := 0
+	for attempt < mc.maxRetries {
+		res, err := mc.findOne(l, cc, params)
+		if err != nil {
+			if isRetryableErr(err) {
+				attempt++
+				l.Warn("retryable error %s, attempting again (attempt: %v)", err, attempt)
+				continue
+			}
+			return res, err
+		}
+		return res, err
+	}
+	return nil, MaxRetriesExceededError{}
+}
+
+func (mc *mongoClient) findOne(l log.Logger, cc *CallContext, params *FindOneParams) (Decoder, error) {
 	if ok := params.valid(); !ok {
 		l.Error("invalid parameters")
 		return nil, MissingRequiredParameterError{}
@@ -96,7 +122,6 @@ func (mc *mongoClient) FindOne(l log.Logger, cc *CallContext, params *FindOnePar
 		return nil, err
 	}
 	return resp, nil
-
 }
 
 type FindManyParams struct {
@@ -110,8 +135,25 @@ func (fmp *FindManyParams) valid() bool {
 }
 
 func (mc *mongoClient) FindMany(l log.Logger, cc *CallContext, params *FindManyParams) (Decoder, error) {
+	attempt := 0
+	for attempt < mc.maxRetries {
+		res, err := mc.findMany(l, cc, params)
+		if err != nil {
+			if isRetryableErr(err) {
+				attempt++
+				l.Warn("retryable error %s, attempting again (attempt: %v)", err, attempt)
+				continue
+			}
+			return res, err
+		}
+		return res, err
+	}
+	return nil, MaxRetriesExceededError{}
+}
+
+func (mc *mongoClient) findMany(l log.Logger, cc *CallContext, params *FindManyParams) (Decoder, error) {
 	if ok := params.valid(); !ok {
-		l.Error("invalid parameters")
+		l.Error("invalid parameters for findMany operation")
 		return nil, MissingRequiredParameterError{}
 	}
 	collection := mc.Collection(params.Collection)
@@ -135,13 +177,35 @@ func (iop *InsertOneParams) valid() bool {
 	return iop.Collection != ""
 }
 
-func (mc *mongoClient) InsertOne(l log.Logger, cc *CallContext, document interface{}, params *InsertOneParams) (interface{}, error) {
+type InsertOneResult struct {
+	InsertedID interface{}
+}
+
+func (mc *mongoClient) InsertOne(l log.Logger, cc *CallContext, document interface{}, params *InsertOneParams) (*InsertOneResult, error) {
+	attempt := 0
+	for attempt < mc.maxRetries {
+		res, err := mc.insertOne(l, cc, document, params)
+		if err != nil {
+			if isRetryableErr(err) {
+				attempt++
+				l.Warn("retryable error %s, attempting again (attempt: %v)", err, attempt)
+				continue
+			}
+			return res, err
+		}
+		return res, err
+	}
+	return nil, MaxRetriesExceededError{}
+}
+
+func (mc *mongoClient) insertOne(l log.Logger, cc *CallContext, document interface{}, params *InsertOneParams) (*InsertOneResult, error) {
+	var result *InsertOneResult
 	if ok := params.valid(); !ok {
-		l.Error("invalid parameters")
+		l.Error("invalid parameters for insertOne operation")
 		return nil, MissingRequiredParameterError{}
 	}
 	collection := mc.Collection(params.Collection)
-	result, err := collection.InsertOne(cc.ctx, document, params.AdditionalOpts...)
+	res, err := collection.InsertOne(cc.ctx, document, params.AdditionalOpts...)
 	if err != nil {
 		if isCollisionErr(err) {
 			l.Error("collision found trying to insert into %v: %v", params.Collection, err)
@@ -150,7 +214,8 @@ func (mc *mongoClient) InsertOne(l log.Logger, cc *CallContext, document interfa
 		l.Error("unable to insert document into %v", err)
 		return nil, err
 	}
-	return result.InsertedID, nil
+	result.InsertedID = res.InsertedID
+	return result, nil
 }
 
 type InsertManyParams struct {
@@ -162,13 +227,35 @@ func (imp *InsertManyParams) valid() bool {
 	return imp.Collection != ""
 }
 
-func (mc *mongoClient) InsertMany(l log.Logger, cc *CallContext, data []interface{}, params *InsertManyParams) (interface{}, error) {
+type InsertManyResult struct {
+	InsertedIDs []interface{}
+}
+
+func (mc *mongoClient) InsertMany(l log.Logger, cc *CallContext, data []interface{}, params *InsertManyParams) (*InsertManyResult, error) {
+	attempt := 0
+	for attempt < mc.maxRetries {
+		res, err := mc.insertMany(l, cc, data, params)
+		if err != nil {
+			if isRetryableErr(err) {
+				attempt++
+				l.Warn("retryable error %s, attempting again (attempt: %v)", err, attempt)
+				continue
+			}
+			return res, err
+		}
+		return res, err
+	}
+	return nil, MaxRetriesExceededError{}
+}
+
+func (mc *mongoClient) insertMany(l log.Logger, cc *CallContext, data []interface{}, params *InsertManyParams) (*InsertManyResult, error) {
+	var result *InsertManyResult
 	if ok := params.valid(); !ok {
-		l.Error("invalid parameters")
+		l.Error("invalid parameters for insertMany operation")
 		return nil, MissingRequiredParameterError{}
 	}
 	collection := mc.Collection(params.Collection)
-	result, err := collection.InsertMany(cc.ctx, data, params.AdditionalOpts...)
+	res, err := collection.InsertMany(cc.ctx, data, params.AdditionalOpts...)
 	if err != nil {
 		if isCollisionErr(err) {
 			l.Error("collision found trying to insert many into %v: %v", params.Collection, err)
@@ -177,7 +264,8 @@ func (mc *mongoClient) InsertMany(l log.Logger, cc *CallContext, data []interfac
 		l.Error("unable to insert many into %v: %v", params.Collection, err)
 		return nil, err
 	}
-	return result.InsertedIDs, nil
+	result.InsertedIDs = res.InsertedIDs
+	return result, nil
 }
 
 type UpsertParams struct {
@@ -193,10 +281,35 @@ func (up *UpsertParams) valid() bool {
 	return up.Collection != "" && up.Filter != nil
 }
 
-func (mc *mongoClient) Upsert(l log.Logger, cc *CallContext, updates interface{}, params *UpsertParams) (int64, error) {
+type UpsertResult struct {
+	MatchedCount  int64       // The number of documents matched by the filter.
+	ModifiedCount int64       // The number of documents modified by the operation.
+	UpsertedCount int64       // The number of documents upserted by the operation.
+	UpsertedID    interface{} // The _id field of the upserted document, or nil if no upsert was done.
+}
+
+func (mc *mongoClient) Upsert(l log.Logger, cc *CallContext, updates interface{}, params *UpsertParams) (*UpsertResult, error) {
+	attempt := 0
+	for attempt < mc.maxRetries {
+		res, err := mc.upsert(l, cc, updates, params)
+		if err != nil {
+			if isRetryableErr(err) {
+				attempt++
+				l.Warn("retryable error %s, attempting again (attempt: %v)", err, attempt)
+				continue
+			}
+			return res, err
+		}
+		return res, err
+	}
+	return nil, MaxRetriesExceededError{}
+}
+
+func (mc *mongoClient) upsert(l log.Logger, cc *CallContext, updates interface{}, params *UpsertParams) (*UpsertResult, error) {
+	var resp *UpsertResult
 	if ok := params.valid(); !ok {
-		l.Error("invalid parameters")
-		return 0, MissingRequiredParameterError{}
+		l.Error("invalid parameters for upsert operation")
+		return resp, MissingRequiredParameterError{}
 	}
 	collection := mc.Collection(params.Collection)
 	updateCmd := updates
@@ -217,9 +330,13 @@ func (mc *mongoClient) Upsert(l log.Logger, cc *CallContext, updates interface{}
 	}
 	if err != nil {
 		l.Error("unable to update doc(s): %v", err)
-		return 0, err
+		return resp, err
 	}
-	return res.ModifiedCount, nil
+	resp.MatchedCount = res.MatchedCount
+	resp.ModifiedCount = res.ModifiedCount
+	resp.UpsertedCount = res.UpsertedCount
+	resp.UpsertedID = res.UpsertedID
+	return resp, nil
 }
 
 type DeleteParams struct {
@@ -234,14 +351,34 @@ func (dp *DeleteParams) valid() bool {
 	return dp.Collection != "" && dp.Filter != nil
 }
 
-func (mc *mongoClient) Delete(l log.Logger, cc *CallContext, params *DeleteParams) (int64, error) {
-	if ok := params.valid(); !ok {
-		l.Error("invalid parameters")
-		return 0, MissingRequiredParameterError{}
+type DeleteResult struct {
+	DeletedCount int64
+}
+
+func (mc *mongoClient) Delete(l log.Logger, cc *CallContext, params *DeleteParams) (*DeleteResult, error) {
+	attempt := 0
+	for attempt < mc.maxRetries {
+		res, err := mc.delete(l, cc, params)
+		if err != nil {
+			if isRetryableErr(err) {
+				attempt++
+				l.Warn("retryable error %s, attempting again (attempt: %v)", err, attempt)
+				continue
+			}
+			return res, err
+		}
+		return res, err
 	}
+	return nil, MaxRetriesExceededError{}
+}
 
+func (mc *mongoClient) delete(l log.Logger, cc *CallContext, params *DeleteParams) (*DeleteResult, error) {
+	var result *DeleteResult
+	if ok := params.valid(); !ok {
+		l.Error("invalid parameters for delete operation")
+		return result, MissingRequiredParameterError{}
+	}
 	collection := mc.Collection(params.Collection)
-
 	var err error
 	var res *mongo.DeleteResult
 	if !params.Multiple {
@@ -250,8 +387,24 @@ func (mc *mongoClient) Delete(l log.Logger, cc *CallContext, params *DeleteParam
 		res, err = collection.DeleteMany(cc.ctx, params.Filter, params.AdditionalOpts...)
 	}
 	if err != nil {
-		l.Error("unable to update doc(s): %v", err)
-		return 0, err
+		l.Error("unable to delete doc(s): %v", err)
+		return result, err
 	}
-	return res.DeletedCount, nil
+	result.DeletedCount = res.DeletedCount
+	return result, nil
+}
+
+func isRetryableErr(err error) bool {
+	for _, eStr := range retryableErrs {
+		if strings.Contains(err.Error(), eStr) {
+			return true
+		}
+	}
+	return false
+}
+
+type MaxRetriesExceededError struct{}
+
+func (e MaxRetriesExceededError) Error() string {
+	return "max retries exhausted trying to call database"
 }
