@@ -48,6 +48,10 @@ func basicAuth(username, password string) string {
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
+func (r *response) Response() *http.Response {
+	return r.resp
+}
+
 func (r *response) IsError() bool {
 	return r.hasError
 }
